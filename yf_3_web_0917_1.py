@@ -8,8 +8,17 @@ import requests
 import streamlit as st
 import yfinance as yf
 from dotenv import load_dotenv
-from FinMind.data import DataLoader
-from supabase import create_client, Client
+
+try:
+    from FinMind.data import DataLoader
+except Exception:
+    DataLoader = None
+
+try:
+    from supabase import create_client, Client
+except Exception:
+    create_client = None
+    Client = None
 
 load_dotenv()
 
@@ -31,9 +40,9 @@ SUPABASE_URL = get_app_secret("SUPABASE_URL")
 SUPABASE_KEY = get_app_secret("SUPABASE_KEY")
 
 @st.cache_resource
-def init_supabase() -> Client:
+def init_supabase():
     """初始化並快取 Supabase 客戶端連線"""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    if not SUPABASE_URL or not SUPABASE_KEY or create_client is None:
         return None
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -64,7 +73,7 @@ STOCK_NAMES = {
     "2324.TW": "仁寶", "6719.TW": "力智",
 }
 
-finmind_loader = DataLoader()
+finmind_loader = DataLoader() if DataLoader is not None else None
 
 st.set_page_config(
     page_title="Bloomstx台股策略雷達",
@@ -261,6 +270,8 @@ def evaluate_signals(metrics, price_pool, volume_pool):
     return metrics
 
 def foreign_buy_two_days(stock_id):
+    if finmind_loader is None:
+        return False
     try:
         today = pd.Timestamp.today()
         data = finmind_loader.taiwan_stock_institutional_investors(
