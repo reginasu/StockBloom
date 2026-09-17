@@ -76,7 +76,7 @@ STOCK_NAMES = {
 finmind_loader = DataLoader() if DataLoader is not None else None
 
 st.set_page_config(
-    page_title="Bloomstx台股策略雷達",
+    page_title="Bloomstx台股策略UP雷達",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
