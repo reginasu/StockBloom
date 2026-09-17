@@ -5,3 +5,5 @@ yfinance
 FinMind
 supabase
 python-dotenv
+FinMind
+tqdm
