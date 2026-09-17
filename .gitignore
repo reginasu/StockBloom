@@ -1,0 +1,9 @@
+# 虛擬環境（最重要的關鍵！）
+.venv/
+venv/
+ENV/
+
+# Python 快取與環境變數檔案
+__pycache__/
+*.pyc
+.env

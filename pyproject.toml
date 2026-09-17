@@ -1,0 +1,25 @@
+[project]
+name = "stockbloom"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "ReginaPy Su", email = "rsu04122021@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dotenv>=0.9.9",
+    "finmind>=2.0.9",
+    "pandas>=2.3.3",
+    "requests>=2.34.2",
+    "streamlit>=1.64.0",
+    "supabase>=2.31.0",
+    "yfinance>=1.7.0",
+]
+
+[project.scripts]
+stockbloom = "stockbloom:main"
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
