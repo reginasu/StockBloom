@@ -1,7 +1,7 @@
 <div align="center">
 
-# 🌸 Bloomstx 繁花策略雷達
-### TWStock Automated Strategy & Data Radar System
+# 🌸 StockBloom 台股策略雷達
+### Taiwan Stock Strategy Radar
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
@@ -10,23 +10,66 @@
 
 <p align="center">
   <b>「數據如籽，策略如水；於波動之中，繁花盛開。」</b><br>
-  全自動市場指標掃描、技術與籌碼面多重過濾系統，即時同步選股結果至 Supabase 雲端資料庫。
+  由自動化資料抓取、技術面篩選與雲端同步組成的台股策略掃描系統。
 </p>
 
 </div>
 
 ---
 
-## 📌 系統簡介 (Overview)
+## 📌 專案簡介
 
-**Bloomstx 繁花策略雷達** 是一個整合全台股（TWSE/TPEx）上市上櫃個股的即時策略掃描系統。系統透握自動化 API 擷取每日行情與籌碼數據，針對全市場成交量前 300 大及特定股價區間之標的，進行**均線多頭防追高回檔**與**布林頻寬極致壓縮量縮**的雙核心篩選，並將每日觸發訊號無縫寫入 **Supabase 雲端資料庫**。
+StockBloom 是一個以台股市場為核心的策略掃描與數據管理系統，整合上市上櫃個股行情、技術指標與籌碼面資料，透過自動化流程持續篩選具潛力的交易標的。
+
+系統會定期抓取 TWSE / TPEx 市場資料，篩選高流動性與適當價位的股票，並搭配多項技術條件進行策略判斷；最後將符合條件的結果自動同步至 Supabase 雲端資料庫，方便後續觀察、回測與追蹤。
 
 ---
 
-## 🎯 核心篩選機制 (Selection Criteria)
-
-系統採用多重架構進行嚴格的標的過濾：
+## 🎯 核心流程
 
 ```text
- [全市場每日行情] ➔ [成交量前300大標的池] ➔ [技術/籌碼策略運算] ➔ [雲端DB自動紀錄]
-(TWSE/TPEx API)    (流動性初篩/價位過濾)   (多頭回檔/布林壓縮)   (Supabase Upsert)# StockBloom
+[全市場行情資料] → [成交量前 300 大標的池] → [技術 / 籌碼策略判斷] → [雲端資料儲存]
+(TWSE / TPEx API)      (流動性與價位初篩)          (均線、布林、回檔條件)         (Supabase Upsert)
+```
+
+這個流程讓系統兼顧效率與可擴充性：
+- 先依市場資料建立候選池
+- 再用策略邏輯過濾高風險與低勝率標的
+- 最後將結果寫入資料庫，支援後續分析與可視化
+
+---
+
+## ⚙️ 系統特色
+
+- ⚡ 多執行緒高效率運算：利用 ThreadPoolExecutor 並行處理多個資料任務，縮短全市場指標計算時間。
+- ☁️ 雲端資料同步：直接整合 Supabase，將每日符合條件的個股與技術資料寫入資料庫，避免重複紀錄與資料缺失。
+- 📊 動態儀表板：基於 Streamlit 建構互動式看板，提供指標分頁、即時 KPI 卡片與便利的 Yahoo Finance 快速連結。
+- 🛠️ 強健資料補齊機制：自動標準化 TWSE / TPEx 交易日期與 yfinance 歷史資料，提升資料一致性與系統穩定性。
+- 🧠 策略導向篩選：整合均線多頭、回檔防守與布林帶壓縮等條件，依市場狀況進行更有邏輯的標的判斷。
+
+---
+
+## 🧩 技術棧
+
+- Python 3.10+
+- Streamlit
+- yfinance
+- Pandas / NumPy
+- Supabase
+- ThreadPoolExecutor
+
+---
+
+## 🚀 使用場景
+
+StockBloom 適合用於：
+- 台股日常市場掃描
+- 策略觀察與候選股發掘
+- 資料自動收集與雲端存檔
+- 儀表板化呈現市場機會
+
+---
+
+## 📌 備註
+
+此專案提供的是市場觀測與策略篩選框架，適合用於研究、開發與持續優化交易邏輯。實際投資決策仍需結合風險管理與個人判斷。
