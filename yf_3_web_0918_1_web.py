@@ -33,7 +33,7 @@ def get_app_secret(key: str):
     return os.getenv(key)
 
 # ==========================================
-# 0. Supabase 資料庫連線設定 (安全讀取金鑰)
+# 0. Supabase 資料庫連線設定
 # ==========================================
 SUPABASE_URL = get_app_secret("SUPABASE_URL")
 SUPABASE_KEY = get_app_secret("SUPABASE_KEY")
@@ -47,7 +47,7 @@ def init_supabase():
 
 try:
     supabase = init_supabase()
-except Exception as e:
+except Exception:
     supabase = None
 
 # ==========================================
@@ -81,7 +81,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 注入美化樣式 CSS
+# 注入美化 CSS 樣式
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;900&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
@@ -89,8 +89,6 @@ st.markdown("""
     body {
         font-family: 'Plus Jakarta Sans', 'Noto Serif TC', sans-serif;
     }
-    
-    /* 頂部 Hero Header 樣式 */
     .hero-header {
         background: linear-gradient(135deg, rgba(16, 37, 28, 0.9) 0%, rgba(26, 54, 42, 0.85) 100%);
         border: 1px solid rgba(82, 183, 136, 0.25);
@@ -134,8 +132,6 @@ st.markdown("""
         margin: 0;
         opacity: 0.9;
     }
-
-    /* 指卡片優化 */
     [data-testid="stMetric"] {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -147,8 +143,6 @@ st.markdown("""
         border-color: rgba(116, 198, 157, 0.4);
         transform: translateY(-2px);
     }
-    
-    /* 頁籤 Tab 樣式優化 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
@@ -158,8 +152,6 @@ st.markdown("""
         padding: 0 18px;
         font-weight: 600;
     }
-
-    /* 側邊欄優化 */
     [data-testid="stSidebar"] {
         background-color: rgba(15, 23, 20, 0.95);
         border-right: 1px solid rgba(255, 255, 255, 0.05);
@@ -169,7 +161,54 @@ st.markdown("""
 
 
 # ==========================================
-# 2. 資料處理與計算函式
+# 2. 表格渲染與 Config 函式 (需放在 main 之前)
+# ==========================================
+def render_table(frame):
+    columns = [
+        "Ticker", "Name", "Close", "MA5", "MA10", "MA20", "BIAS5",
+        "K", "D", "BB_Width", "PullbackSignal", "FinalPullbackSignal",
+        "PreBreakoutSignal", "ComboSignal",
+    ]
+    display_columns = {
+        "Ticker": "股票代號", "Name": "股票名稱", "Close": "收盤價",
+        "MA5": "5日均線", "MA10": "10日均線", "MA20": "20日均線",
+        "BIAS5": "5日乖離率(%)", "K": "KD-K值", "D": "KD-D值",
+        "BB_Width": "布林寬度", "PullbackSignal": "回檔訊號",
+        "FinalPullbackSignal": "外資連買回檔", "PreBreakoutSignal": "突破前兆",
+        "ComboSignal": "🔥強棒交集",
+    }
+    # 確保所需欄位皆存在
+    existing_cols = [col for col in columns if col in frame.columns]
+    shown = frame[existing_cols].rename(columns=display_columns).copy()
+    
+    if "股票代號" in shown.columns:
+        tickers = shown["股票代號"].copy()
+        shown["股票代號"] = tickers.map(lambda ticker: f"https://tw.stock.yahoo.com/quote/{ticker}/technical-analysis")
+        if "股票名稱" in shown.columns:
+            shown["股票名稱"] = [
+                f"https://tw.stock.yahoo.com/quote/{ticker}/profile?name={name}"
+                for ticker, name in zip(tickers, shown["股票名稱"])
+            ]
+    return shown
+
+def table_config():
+    return {
+        "股票代號": st.column_config.LinkColumn("股票代號", display_text=r".*/quote/([^/]+)/technical-analysis"),
+        "股票名稱": st.column_config.LinkColumn("股票名稱", display_text=r".*/profile\?name=(.*)"),
+        "收盤價": st.column_config.NumberColumn("收盤價", format="%.2f"),
+        "5日均線": st.column_config.NumberColumn("5日均線", format="%.2f"),
+        "10日均線": st.column_config.NumberColumn("10日均線", format="%.2f"),
+        "20日均線": st.column_config.NumberColumn("20日均線", format="%.2f"),
+        "5日乖離率(%)": st.column_config.NumberColumn("5日乖離率(%)", format="%.2f"),
+        "KD-K值": st.column_config.NumberColumn("KD-K值", format="%.2f"),
+        "KD-D值": st.column_config.NumberColumn("KD-D值", format="%.2f"),
+        "布林寬度": st.column_config.NumberColumn("布林寬度", format="%.2f"),
+        "🔥強棒交集": st.column_config.CheckboxColumn("🔥強棒交集"),
+    }
+
+
+# ==========================================
+# 3. 資料處理與計算函式
 # ==========================================
 def to_number(series):
     return pd.to_numeric(series.astype(str).str.replace(",", "", regex=False), errors="coerce")
@@ -396,7 +435,7 @@ def foreign_buy_two_days(stock_id):
         return False
 
 # ==========================================
-# 3. 寫入 Supabase 資料庫邏輯
+# 4. 寫入 Supabase 資料庫邏輯
 # ==========================================
 def save_results_to_supabase(df: pd.DataFrame):
     if supabase is None or df is None or df.empty:
@@ -404,7 +443,7 @@ def save_results_to_supabase(df: pd.DataFrame):
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     
-    signal_df = df[df["PullbackSignal"] | df["PreBreakoutSignal"] | df["FinalPullbackSignal"]].copy()
+    signal_df = df[df.get("PullbackSignal", False) | df.get("PreBreakoutSignal", False) | df.get("FinalPullbackSignal", False)].copy()
     if signal_df.empty:
         return True, "今日無觸發訊號的股票，無需寫入"
 
@@ -422,19 +461,19 @@ def save_results_to_supabase(df: pd.DataFrame):
             "k_value": float(row["K"]),
             "d_value": float(row["D"]),
             "bb_width": float(row["BB_Width"]),
-            "pullback_signal": bool(row["PullbackSignal"]),
-            "final_pullback_signal": bool(row["FinalPullbackSignal"]),
-            "pre_breakout_signal": bool(row["PreBreakoutSignal"]),
+            "pullback_signal": bool(row.get("PullbackSignal", False)),
+            "final_pullback_signal": bool(row.get("FinalPullbackSignal", False)),
+            "pre_breakout_signal": bool(row.get("PreBreakoutSignal", False)),
         })
 
     try:
-        response = supabase.table("stock_selection_log").insert(records).execute()
+        supabase.table("stock_selection_log").insert(records).execute()
         return True, f"成功寫入 {len(records)} 筆觸發訊號至 Supabase 資料庫！"
     except Exception as error:
         return False, f"寫入 Supabase 失敗: {error}"
 
 # ==========================================
-# 4. 掃描流程控制 (已修正 KeyError 防護)
+# 5. 掃描流程控制
 # ==========================================
 def scan_market():
     quotes = fetch_market_quotes()
@@ -459,7 +498,6 @@ def scan_market():
         
     output = pd.DataFrame(results)
     
-    # 【關鍵修復】確保所有需要的訊號欄位都存在，避免 KeyError
     required_signals = [
         "PullbackSignal", "Pullback100250", "PreBreakoutSignal", 
         "ComboSignal", "FinalPullbackSignal", "ForeignBuy2Days"
@@ -478,12 +516,10 @@ def scan_market():
 
     return output, len(candidates), len(price_pool), len(volume_pool)
 
-
 # ==========================================
-# 5. UI 與主程式 (Streamlit)
+# 6. UI 與主程式 (Streamlit)
 # ==========================================
 def main():
-    # 頂部美化 Header 與 Slogan 區塊
     st.markdown("""
     <div class="hero-header">
         <div class="brand-title">Bloomstx 台股策略雷達</div>
@@ -509,12 +545,10 @@ def main():
 
     output, candidate_count, price_count, volume_count = st.session_state.scan_result
     
-    # 【關鍵修復】增加判斷，若 output 為空或 None 時優雅提示，不觸發報錯
     if output is None or output.empty:
-        st.warning("⚠️ 目前無有效市場資料或未掃描到符合技術條件的標的，請稍後點擊「重新掃描市場」Try Again。")
+        st.warning("⚠️ 目前無有效市場資料或未掃描到符合條件的標的，請點擊「重新掃描市場」。")
         return
 
-    # 安全地進行 signal_mask 計算
     signal_mask = (
         output.get("PullbackSignal", pd.Series(False, index=output.index)) |
         output.get("PreBreakoutSignal", pd.Series(False, index=output.index)) |
@@ -522,7 +556,6 @@ def main():
         output.get("ComboSignal", pd.Series(False, index=output.index))
     )
     
-    # 數據指標卡片區
     metric_columns = st.columns(6)
     metric_columns[0].metric("有效標的", f"{len(output)} / {candidate_count}")
     metric_columns[1].metric("價格池", f"{price_count} 檔")
@@ -533,7 +566,6 @@ def main():
 
     st.write("")
 
-    # 結果 Tab 分頁
     tabs = st.tabs(["🔥 強棒交集", "🎯 今日策略總覽", "📉 多頭回檔", "⚡ 突破前兆", "📊 全部資料"])
     
     with tabs[0]:
