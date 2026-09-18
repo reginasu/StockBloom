@@ -464,14 +464,17 @@ def save_results_to_supabase(df: pd.DataFrame):
             "date": today_str,
             "ticker": str(row["Ticker"]),
             "stock_name": str(row["Name"]),
-            "close_price": float(row["Close"]),
-            "ma5": float(row["MA5"]),
-            "ma10": float(row["MA10"]),
-            "ma20": float(row["MA20"]),
-            "bias5": float(row["BIAS5"]),
-            "k_value": float(row["K"]),
-            "d_value": float(row["D"]),
-            "bb_width": float(row["BB_Width"]),
+            # 四捨五入至小數點後 1 位
+            "close_price": round(float(row["Close"]), 1),
+            "ma5": round(float(row["MA5"]), 1),
+            "ma10": round(float(row["MA10"]), 1),
+            "ma20": round(float(row["MA20"]), 1),
+            "bias5": round(float(row["BIAS5"]), 1),
+            # 四捨五入至小數點後 2 位
+            "k_value": round(float(row["K"]), 2),
+            "d_value": round(float(row["D"]), 2),
+            "bb_width": round(float(row["BB_Width"]), 2),
+            # 訊號狀態
             "pullback_signal": bool(row.get("PullbackSignal", False)),
             "final_pullback_signal": bool(row.get("FinalPullbackSignal", False)),
             "pre_breakout_signal": bool(row.get("PreBreakoutSignal", False)),
@@ -483,7 +486,7 @@ def save_results_to_supabase(df: pd.DataFrame):
             records,
             on_conflict="date, ticker"
         ).execute()
-        return True, f"成功同步 {len(records)} 筆觸發訊號至 Supabase 資料庫 (已自動覆蓋重複紀錄)！"
+        return True, f"成功同步 {len(records)} 筆觸發訊號至 Supabase 資料庫 (已完成格式化與防重複處置)！"
     except Exception as error:
         return False, f"寫入 Supabase 失敗: {error}"
 
