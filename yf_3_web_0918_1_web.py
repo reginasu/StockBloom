@@ -311,15 +311,16 @@ def foreign_buy_two_days(stock_id):
         return False
 
 # ==========================================
-# 3. 寫入 Supabase 資料庫邏輯
+# 3. 寫入 Supabase 資料庫邏輯 (完整欄位版)
 # ==========================================
 def save_results_to_supabase(df: pd.DataFrame):
-    """將選股訊號成果批次寫入 Supabase stock_selection_log 表"""
+    """將選股訊號成果與全部指標資料批次寫入 Supabase stock_selection_log 表"""
     if supabase is None or df is None or df.empty:
         return False, "Supabase 未連線或資料為空 (請檢查 Secrets 設定)"
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     
+    # 篩選有觸發任一訊號的標的寫入 (若想儲存全部資料可去掉這行條件)
     signal_df = df[df["PullbackSignal"] | df["PreBreakoutSignal"] | df["FinalPullbackSignal"]].copy()
     if signal_df.empty:
         return True, "今日無觸發訊號的股票，無需寫入"
@@ -329,10 +330,18 @@ def save_results_to_supabase(df: pd.DataFrame):
         records.append({
             "date": today_str,
             "ticker": str(row["Ticker"]),
+            "stock_name": str(row["Name"]),
             "close_price": float(row["Close"]),
+            "ma5": float(row["MA5"]),
+            "ma10": float(row["MA10"]),
+            "ma20": float(row["MA20"]),
             "bias5": float(row["BIAS5"]),
             "k_value": float(row["K"]),
             "d_value": float(row["D"]),
+            "bb_width": float(row["BB_Width"]),
+            "pullback_signal": bool(row["PullbackSignal"]),
+            "final_pullback_signal": bool(row["FinalPullbackSignal"]),
+            "pre_breakout_signal": bool(row["PreBreakoutSignal"]),
         })
 
     try:
@@ -340,7 +349,7 @@ def save_results_to_supabase(df: pd.DataFrame):
         return True, f"成功寫入 {len(records)} 筆觸發訊號至 Supabase 資料庫！"
     except Exception as error:
         return False, f"寫入 Supabase 失敗: {error}"
-
+    
 # ==========================================
 # 4. 掃描流程控制
 # ==========================================
