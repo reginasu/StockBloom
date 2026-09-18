@@ -446,7 +446,15 @@ def save_results_to_supabase(df: pd.DataFrame):
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     
-    signal_df = df[df.get("PullbackSignal", False) | df.get("PreBreakoutSignal", False) | df.get("FinalPullbackSignal", False)].copy()
+    # 篩選出觸發任意訊號的標的
+    signal_mask = (
+        df.get("PullbackSignal", False) |
+        df.get("PreBreakoutSignal", False) |
+        df.get("FinalPullbackSignal", False) |
+        df.get("ComboSignal", False)
+    )
+    signal_df = df[signal_mask].copy()
+    
     if signal_df.empty:
         return True, "今日無觸發訊號的股票，無需寫入"
 
@@ -470,8 +478,12 @@ def save_results_to_supabase(df: pd.DataFrame):
         })
 
     try:
-        supabase.table("stock_selection_log").insert(records).execute()
-        return True, f"成功寫入 {len(records)} 筆觸發訊號至 Supabase 資料庫！"
+        # 使用 upsert 並指定衝突鍵為 date, ticker
+        supabase.table("stock_selection_log").upsert(
+            records,
+            on_conflict="date, ticker"
+        ).execute()
+        return True, f"成功同步 {len(records)} 筆觸發訊號至 Supabase 資料庫 (已自動覆蓋重複紀錄)！"
     except Exception as error:
         return False, f"寫入 Supabase 失敗: {error}"
 
