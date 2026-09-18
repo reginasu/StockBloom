@@ -33,10 +33,13 @@ def get_app_secret(key: str):
     return os.getenv(key)
 
 # ==========================================
-# 0. Supabase 資料庫連線設定
-# ==========================================
-SUPABASE_URL = get_app_secret("SUPABASE_URL")
-SUPABASE_KEY = get_app_secret("SUPABASE_KEY")
+# 修改前 (原本的寫法)
+# SUPABASE_URL = get_app_secret("SUPABASE_URL")
+# SUPABASE_KEY = get_app_secret("SUPABASE_KEY")
+
+# 修改後 (直接安全讀取 st.secrets)
+SUPABASE_URL = st.secrets["SUPABASE_URL"] if "SUPABASE_URL" in st.secrets else os.getenv("SUPABASE_URL")
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"] if "SUPABASE_KEY" in st.secrets else os.getenv("SUPABASE_KEY")
 
 @st.cache_resource
 def init_supabase():
@@ -534,10 +537,16 @@ def main():
         scan_requested = st.button("🚀 重新掃描市場並記錄", type="primary", use_container_width=True)
         st.divider()
         st.markdown("**Supabase 雲端資料庫**")
-        if supabase:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        st.error("Secrets 未讀取到 (URL 或 Key 為空)")
+    elif create_client is None:
+        st.error("Supabase 套件匯入失敗 (請檢查 requirements.txt)")
+    else:
+        try:
+            test_client = create_client(SUPABASE_URL, SUPABASE_KEY)
             st.success("Cloud DB 連線正常")
-        else:
-            st.error("Cloud DB 未連線 (請檢查 Secrets)")
+        except Exception as e:
+            st.error(f"連線失敗: {e}")
 
     if scan_requested or "scan_result" not in st.session_state:
         with st.spinner("正在抓取最新市場行情、計算策略技術指標並同步至 Supabase..."):
