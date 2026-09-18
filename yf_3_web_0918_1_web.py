@@ -434,7 +434,7 @@ def save_results_to_supabase(df: pd.DataFrame):
         return False, f"寫入 Supabase 失敗: {error}"
 
 # ==========================================
-# 4. 掃描流程控制
+# 4. 掃描流程控制 (已修正 KeyError 防護)
 # ==========================================
 def scan_market():
     quotes = fetch_market_quotes()
@@ -449,14 +449,25 @@ def scan_market():
 
     for row in results:
         row["ForeignBuy2Days"] = False
-        if row["Pullback100250"]:
+        if row.get("Pullback100250", False):
             time.sleep(FINMIND_INTERVAL_SECONDS)
             row["ForeignBuy2Days"] = foreign_buy_two_days(row["Ticker"].rsplit(".", 1)[0])
-        row["FinalPullbackSignal"] = row["Pullback100250"] and row["ForeignBuy2Days"]
+        row["FinalPullbackSignal"] = row.get("Pullback100250", False) and row["ForeignBuy2Days"]
 
     if not results:
         return None, len(candidates), len(price_pool), len(volume_pool)
+        
     output = pd.DataFrame(results)
+    
+    # 【關鍵修復】確保所有需要的訊號欄位都存在，避免 KeyError
+    required_signals = [
+        "PullbackSignal", "Pullback100250", "PreBreakoutSignal", 
+        "ComboSignal", "FinalPullbackSignal", "ForeignBuy2Days"
+    ]
+    for col in required_signals:
+        if col not in output.columns:
+            output[col] = False
+
     output["Name"] = output["Name"].replace({"": "中文名稱未取得", "nan": "中文名稱未取得"})
     
     success, msg = save_results_to_supabase(output)
@@ -467,47 +478,10 @@ def scan_market():
 
     return output, len(candidates), len(price_pool), len(volume_pool)
 
+
 # ==========================================
 # 5. UI 與主程式 (Streamlit)
 # ==========================================
-def render_table(frame):
-    columns = [
-        "Ticker", "Name", "Close", "MA5", "MA10", "MA20", "BIAS5",
-        "K", "D", "BB_Width", "PullbackSignal", "FinalPullbackSignal",
-        "PreBreakoutSignal", "ComboSignal",
-    ]
-    display_columns = {
-        "Ticker": "股票代號", "Name": "股票名稱", "Close": "收盤價",
-        "MA5": "5日均線", "MA10": "10日均線", "MA20": "20日均線",
-        "BIAS5": "5日乖離率(%)", "K": "KD-K值", "D": "KD-D值",
-        "BB_Width": "布林寬度", "PullbackSignal": "回檔訊號",
-        "FinalPullbackSignal": "外資連買回檔", "PreBreakoutSignal": "突破前兆",
-        "ComboSignal": "🔥強棒交集",
-    }
-    shown = frame[columns].rename(columns=display_columns).copy()
-    tickers = shown["股票代號"].copy()
-    shown["股票代號"] = tickers.map(lambda ticker: f"https://tw.stock.yahoo.com/quote/{ticker}/technical-analysis")
-    shown["股票名稱"] = [
-        f"https://tw.stock.yahoo.com/quote/{ticker}/profile?name={name}"
-        for ticker, name in zip(tickers, shown["股票名稱"])
-    ]
-    return shown
-
-def table_config():
-    return {
-        "股票代號": st.column_config.LinkColumn("股票代號", display_text=r".*/quote/([^/]+)/technical-analysis"),
-        "股票名稱": st.column_config.LinkColumn("股票名稱", display_text=r".*/profile\?name=(.*)"),
-        "收盤價": st.column_config.NumberColumn("收盤價", format="%.2f"),
-        "5日均線": st.column_config.NumberColumn("5日均線", format="%.2f"),
-        "10日均線": st.column_config.NumberColumn("10日均線", format="%.2f"),
-        "20日均線": st.column_config.NumberColumn("20日均線", format="%.2f"),
-        "5日乖離率(%)": st.column_config.NumberColumn("5日乖離率(%)", format="%.2f"),
-        "KD-K值": st.column_config.NumberColumn("KD-K值", format="%.2f"),
-        "KD-D值": st.column_config.NumberColumn("KD-D值", format="%.2f"),
-        "布林寬度": st.column_config.NumberColumn("布林寬度", format="%.2f"),
-        "🔥強棒交集": st.column_config.CheckboxColumn("🔥強棒交集"),
-    }
-
 def main():
     # 頂部美化 Header 與 Slogan 區塊
     st.markdown("""
@@ -534,11 +508,19 @@ def main():
             st.session_state.scan_result = scan_market()
 
     output, candidate_count, price_count, volume_count = st.session_state.scan_result
-    if output is None:
-        st.error("目前無法取得有效市場資料，請稍後重新掃描。")
+    
+    # 【關鍵修復】增加判斷，若 output 為空或 None 時優雅提示，不觸發報錯
+    if output is None or output.empty:
+        st.warning("⚠️ 目前無有效市場資料或未掃描到符合技術條件的標的，請稍後點擊「重新掃描市場」Try Again。")
         return
 
-    signal_mask = output["PullbackSignal"] | output["PreBreakoutSignal"] | output["FinalPullbackSignal"] | output["ComboSignal"]
+    # 安全地進行 signal_mask 計算
+    signal_mask = (
+        output.get("PullbackSignal", pd.Series(False, index=output.index)) |
+        output.get("PreBreakoutSignal", pd.Series(False, index=output.index)) |
+        output.get("FinalPullbackSignal", pd.Series(False, index=output.index)) |
+        output.get("ComboSignal", pd.Series(False, index=output.index))
+    )
     
     # 數據指標卡片區
     metric_columns = st.columns(6)
