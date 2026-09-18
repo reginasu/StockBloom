@@ -75,11 +75,98 @@ STOCK_NAMES = {
 finmind_loader = DataLoader() if DataLoader is not None else None
 
 st.set_page_config(
-    page_title="Bloomstx台股策略UP雷達",
-    page_icon="📈",
+    page_title="Bloomstx 繁花策略雷達",
+    page_icon="🌸",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# 注入美化樣式 CSS
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;900&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+
+    body {
+        font-family: 'Plus Jakarta Sans', 'Noto Serif TC', sans-serif;
+    }
+    
+    /* 頂部 Hero Header 樣式 */
+    .hero-header {
+        background: linear-gradient(135deg, rgba(16, 37, 28, 0.9) 0%, rgba(26, 54, 42, 0.85) 100%);
+        border: 1px solid rgba(82, 183, 136, 0.25);
+        border-radius: 16px;
+        padding: 32px 28px;
+        margin-bottom: 24px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        position: relative;
+        overflow: hidden;
+    }
+    .hero-header::after {
+        content: "🌸";
+        position: absolute;
+        right: -10px;
+        bottom: -20px;
+        font-size: 110px;
+        opacity: 0.12;
+        pointer-events: none;
+    }
+    .brand-title {
+        font-size: 2.2rem;
+        font-weight: 900;
+        letter-spacing: -0.5px;
+        background: linear-gradient(90deg, #74c69d, #d8f3dc);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 8px;
+    }
+    .brand-slogan {
+        font-family: 'Noto Serif TC', serif;
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #b7e4c7;
+        letter-spacing: 2px;
+        margin-bottom: 12px;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .hero-subtext {
+        font-size: 0.9rem;
+        color: #95d5b2;
+        margin: 0;
+        opacity: 0.9;
+    }
+
+    /* 指卡片優化 */
+    [data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 12px 16px;
+        transition: all 0.3s ease;
+    }
+    [data-testid="stMetric"]:hover {
+        border-color: rgba(116, 198, 157, 0.4);
+        transform: translateY(-2px);
+    }
+    
+    /* 頁籤 Tab 樣式優化 */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 42px;
+        border-radius: 8px;
+        padding: 0 18px;
+        font-weight: 600;
+    }
+
+    /* 側邊欄優化 */
+    [data-testid="stSidebar"] {
+        background-color: rgba(15, 23, 20, 0.95);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 # ==========================================
 # 2. 資料處理與計算函式
@@ -261,15 +348,18 @@ def evaluate_signals(metrics, price_pool, volume_pool):
         and bb_width_new_low
         and metrics["Volume"] / metrics["Vol_MA20"] < 0.90
     )
+    
+    combo_signal = pullback_optimized and prebreakout
+
     metrics.update({
         "PullbackSignal": pullback_optimized,
         "Pullback100250": pullback_100_250,
         "PreBreakoutSignal": prebreakout,
+        "ComboSignal": combo_signal,
     })
     return metrics
 
 def foreign_buy_two_days(stock_id):
-    """【修正重點】優化 FinMind 三大法人買賣超判斷邏輯，預防 AttributeError / KeyError"""
     if finmind_loader is None:
         return False
     try:
@@ -282,45 +372,38 @@ def foreign_buy_two_days(stock_id):
         if data is None or data.empty:
             return False
 
-        # 欄位相容處理
         data.columns = [str(c).lower().strip() for c in data.columns]
         if not {"date", "name", "buy", "sell"}.issubset(data.columns):
             return False
 
-        # 篩選外資 (Foreign_Investor)
         data["name"] = data["name"].astype(str).str.strip().str.lower()
         foreign_df = data[data["name"] == "foreign_investor"].copy()
         if foreign_df.empty:
             return False
 
-        # 轉數字與計算每日淨買超
         foreign_df["buy"] = pd.to_numeric(foreign_df["buy"], errors="coerce").fillna(0)
         foreign_df["sell"] = pd.to_numeric(foreign_df["sell"], errors="coerce").fillna(0)
         foreign_df["net_buy"] = foreign_df["buy"] - foreign_df["sell"]
 
-        # 按日期加總並降冪排序
         daily_net = foreign_df.groupby("date")["net_buy"].sum().sort_index(ascending=False)
 
         if len(daily_net) < 2:
             return False
 
-        # 近兩日皆為買超且總金額 > 500
         return bool(daily_net.iloc[0] > 0 and daily_net.iloc[1] > 0 and daily_net.head(2).sum() > 500)
     except Exception as e:
         print(f"FinMind 外資連買查詢失敗 [{stock_id}]: {e}")
         return False
 
 # ==========================================
-# 3. 寫入 Supabase 資料庫邏輯 (完整欄位版)
+# 3. 寫入 Supabase 資料庫邏輯
 # ==========================================
 def save_results_to_supabase(df: pd.DataFrame):
-    """將選股訊號成果與全部指標資料批次寫入 Supabase stock_selection_log 表"""
     if supabase is None or df is None or df.empty:
         return False, "Supabase 未連線或資料為空 (請檢查 Secrets 設定)"
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     
-    # 篩選有觸發任一訊號的標的寫入 (若想儲存全部資料可去掉這行條件)
     signal_df = df[df["PullbackSignal"] | df["PreBreakoutSignal"] | df["FinalPullbackSignal"]].copy()
     if signal_df.empty:
         return True, "今日無觸發訊號的股票，無需寫入"
@@ -349,7 +432,7 @@ def save_results_to_supabase(df: pd.DataFrame):
         return True, f"成功寫入 {len(records)} 筆觸發訊號至 Supabase 資料庫！"
     except Exception as error:
         return False, f"寫入 Supabase 失敗: {error}"
-    
+
 # ==========================================
 # 4. 掃描流程控制
 # ==========================================
@@ -391,7 +474,7 @@ def render_table(frame):
     columns = [
         "Ticker", "Name", "Close", "MA5", "MA10", "MA20", "BIAS5",
         "K", "D", "BB_Width", "PullbackSignal", "FinalPullbackSignal",
-        "PreBreakoutSignal",
+        "PreBreakoutSignal", "ComboSignal",
     ]
     display_columns = {
         "Ticker": "股票代號", "Name": "股票名稱", "Close": "收盤價",
@@ -399,6 +482,7 @@ def render_table(frame):
         "BIAS5": "5日乖離率(%)", "K": "KD-K值", "D": "KD-D值",
         "BB_Width": "布林寬度", "PullbackSignal": "回檔訊號",
         "FinalPullbackSignal": "外資連買回檔", "PreBreakoutSignal": "突破前兆",
+        "ComboSignal": "🔥強棒交集",
     }
     shown = frame[columns].rename(columns=display_columns).copy()
     tickers = shown["股票代號"].copy()
@@ -421,25 +505,32 @@ def table_config():
         "KD-K值": st.column_config.NumberColumn("KD-K值", format="%.2f"),
         "KD-D值": st.column_config.NumberColumn("KD-D值", format="%.2f"),
         "布林寬度": st.column_config.NumberColumn("布林寬度", format="%.2f"),
+        "🔥強棒交集": st.column_config.CheckboxColumn("🔥強棒交集"),
     }
 
 def main():
-    st.title("Bloomstx台股策略雷達 (Supabase版)")
-    st.markdown('<div class="hero-note">自動掃描市場條件，並同步將條件符合之選股記錄寫入 Supabase 雲端資料庫。</div>', unsafe_allow_html=True)
+    # 頂部美化 Header 與 Slogan 區塊
+    st.markdown("""
+    <div class="hero-header">
+        <div class="brand-title">Bloomstx 台股策略雷達</div>
+        <div class="brand-slogan">「數據如籽，策略如水；於波動之中，繁花盛開。」</div>
+        <div class="hero-subtext">全自動市場指標掃描與條件過濾系統，即時同步選股成果至 Supabase 雲端資料庫。</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     with st.sidebar:
-        st.header("掃描控制")
+        st.header("⚡ 掃描控制")
         st.caption("資料來源：TWSE、TPEx、Yahoo Finance、FinMind")
-        scan_requested = st.button("重新掃描市場並記錄", type="primary", use_container_width=True)
+        scan_requested = st.button("🚀 重新掃描市場並記錄", type="primary", use_container_width=True)
         st.divider()
-        st.markdown("**Supabase 狀態**")
+        st.markdown("**Supabase 雲端資料庫**")
         if supabase:
-            st.success("Cloud DB 已連線")
+            st.success("Cloud DB 連線正常")
         else:
             st.error("Cloud DB 未連線 (請檢查 Secrets)")
 
     if scan_requested or "scan_result" not in st.session_state:
-        with st.spinner("正在抓取行情、計算指標並同步寫入 Supabase..."):
+        with st.spinner("正在抓取最新市場行情、計算策略技術指標並同步至 Supabase..."):
             st.session_state.scan_result = scan_market()
 
     output, candidate_count, price_count, volume_count = st.session_state.scan_result
@@ -447,37 +538,55 @@ def main():
         st.error("目前無法取得有效市場資料，請稍後重新掃描。")
         return
 
-    signal_mask = output["PullbackSignal"] | output["PreBreakoutSignal"] | output["FinalPullbackSignal"]
-    metric_columns = st.columns(5)
-    metric_columns[0].metric("有效資料", f"{len(output)} / {candidate_count}")
+    signal_mask = output["PullbackSignal"] | output["PreBreakoutSignal"] | output["FinalPullbackSignal"] | output["ComboSignal"]
+    
+    # 數據指標卡片區
+    metric_columns = st.columns(6)
+    metric_columns[0].metric("有效標的", f"{len(output)} / {candidate_count}")
     metric_columns[1].metric("價格池", f"{price_count} 檔")
     metric_columns[2].metric("成交量池", f"{volume_count} 檔")
     metric_columns[3].metric("100~250 回檔", f"{int(output['Pullback100250'].sum())} 檔")
-    metric_columns[4].metric("最終回檔", f"{int(output['FinalPullbackSignal'].sum())} 檔")
+    metric_columns[4].metric("突破前兆", f"{int(output['PreBreakoutSignal'].sum())} 檔")
+    metric_columns[5].metric("🔥強棒交集", f"{int(output['ComboSignal'].sum())} 檔")
 
-    tabs = st.tabs(["策略總覽", "多頭回檔", "突破前兆", "全部資料"])
+    st.write("")
+
+    # 結果 Tab 分頁
+    tabs = st.tabs(["🔥 強棒交集", "🎯 今日策略總覽", "📉 多頭回檔", "⚡ 突破前兆", "📊 全部資料"])
+    
     with tabs[0]:
-        st.subheader("今日策略候選 (已記錄至 Supabase)")
+        st.subheader("🔥 強棒交集標的（同時符合多頭回檔 + 突破前兆）")
+        combo_df = output[output["ComboSignal"]].sort_values("Close", ascending=False)
+        if not combo_df.empty:
+            st.dataframe(render_table(combo_df), column_config=table_config(), width="stretch", hide_index=True)
+        else:
+            st.info("目前無同時符合兩種策略的強棒標的。")
+
+    with tabs[1]:
+        st.subheader("今日觸發策略標的 (已同步記錄至 Supabase)")
         if not output[signal_mask].empty:
             st.dataframe(render_table(output[signal_mask].sort_values("Close", ascending=False)), column_config=table_config(), width="stretch", hide_index=True)
         else:
-            st.info("目前無符合標的。")
-    with tabs[1]:
+            st.info("目前無符合任何策略條件的標的。")
+
+    with tabs[2]:
         st.subheader("均線多頭回檔與外資連買回檔")
-        pullback = output[output["FinalPullbackSignal"]].sort_values("K")
+        pullback = output[output["FinalPullbackSignal"] | output["PullbackSignal"]].sort_values("K")
         if not pullback.empty:
             st.dataframe(render_table(pullback), column_config=table_config(), width="stretch", hide_index=True)
         else:
-            st.info("目前無符合標的。")
-    with tabs[2]:
+            st.info("目前無符合回檔策略條件的標的。")
+
+    with tabs[3]:
         st.subheader("布林壓縮與量縮突破前兆")
         breakout = output[output["PreBreakoutSignal"]].sort_values("BB_Width")
         if not breakout.empty:
             st.dataframe(render_table(breakout), column_config=table_config(), width="stretch", hide_index=True)
         else:
-            st.info("目前無符合標的。")
-    with tabs[3]:
-        st.subheader("全部有效技術資料")
+            st.info("目前無符合突破前兆條件的標的。")
+
+    with tabs[4]:
+        st.subheader("全部有效技術指標資料")
         st.dataframe(render_table(output.sort_values("Ticker")), column_config=table_config(), width="stretch", hide_index=True)
 
 if __name__ == "__main__":
