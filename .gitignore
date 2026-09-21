@@ -6,4 +6,19 @@ ENV/
 # Python 快取與環境變數檔案
 __pycache__/
 *.pyc
+
+# Secret / local config files - never commit
 .env
+.env.*
+!.env.example
+.streamlit/
+!.streamlit/.gitkeep
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+credentials.json
+service-account*.json
+secrets.toml
