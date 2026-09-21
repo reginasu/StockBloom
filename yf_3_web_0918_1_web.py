@@ -33,11 +33,7 @@ def get_app_secret(key: str):
     return os.getenv(key)
 
 # ==========================================
-# 修改前 (原本的寫法)
-# SUPABASE_URL = get_app_secret("SUPABASE_URL")
-# SUPABASE_KEY = get_app_secret("SUPABASE_KEY")
-
-# 修改後 (直接安全讀取 st.secrets)
+# 讀取 st.secrets
 SUPABASE_URL = st.secrets["SUPABASE_URL"] if "SUPABASE_URL" in st.secrets else os.getenv("SUPABASE_URL")
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"] if "SUPABASE_KEY" in st.secrets else os.getenv("SUPABASE_KEY")
 
@@ -78,7 +74,7 @@ STOCK_NAMES = {
 finmind_loader = DataLoader() if DataLoader is not None else None
 
 st.set_page_config(
-    page_title="Bloomstx 繁花策略雷達",
+    page_title="Bloomstx 台股策略雷達",
     page_icon="🌸",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -541,8 +537,8 @@ def main():
     st.markdown("""
     <div class="hero-header">
         <div class="brand-title">Bloomstx 台股策略雷達</div>
-        <div class="brand-slogan">「數據如籽，策略如水；於波動之中，繁花盛開。」</div>
-        <div class="hero-subtext">全自動市場指標掃描與條件過濾系統，即時同步選股成果至 Supabase 雲端資料庫。</div>
+        <div class="brand-slogan">「數據如籽，策略如水；於波動之間，繁花盛開。」</div>
+        <div class="hero-subtext">全自動市場指標掃描與條件過濾系統，即時同步選股成果至雲端資料庫。</div>
     </div>
     """, unsafe_allow_html=True)
 
