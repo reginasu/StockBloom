@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
 <p align="center">
-  <b>「數據如籽，策略如水；於波動之中，繁花盛開。」</b><br>
+  <b>「數據如籽，策略如水；於波動之間，繁花盛開。」</b><br>
   由自動化資料抓取、技術面篩選與雲端同步組成的台股策略掃描系統。
 </p>
 
