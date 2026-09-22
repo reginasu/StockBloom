@@ -22,3 +22,4 @@ __pycache__/
 credentials.json
 service-account*.json
 secrets.toml
+.streamlit/secrets.toml
