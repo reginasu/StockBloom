@@ -1,8 +1,107 @@
 import datetime
+import os
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
+
+try:
+    from supabase import create_client
+except Exception:
+    create_client = None
+
+SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+
+STOCK_NAME_MAP = {
+    "1303.TW": "南亞",
+    "1605.TW": "華新",
+    "1815.TWO": "富喬",
+    "2303.TW": "聯電",
+    "2317.TW": "鴻海",
+    "2330.TW": "台積電",
+    "2337.TW": "旺宏",
+    "2344.TW": "華邦電",
+    "2351.TW": "順德",
+    "2377.TW": "微星",
+    "2426.TW": "鼎元",
+    "2454.TW": "聯發科",
+    "2481.TW": "強茂",
+    "2603.TW": "長榮",
+    "2609.TW": "陽明",
+    "2884.TW": "玉山金",
+    "2891.TW": "中信金",
+    "3008.TW": "大立光",
+    "3042.TW": "晶技",
+    "5483.TW": "中美晶",
+    "6271.TW": "考量",
+    "8042.TWO": "金山電",
+    "8069.TWO": "元太",
+}
+
+
+def get_stock_display_name(symbol):
+    symbol = str(symbol).strip()
+    if not symbol:
+        return "標的"
+    if symbol in STOCK_NAME_MAP:
+        return STOCK_NAME_MAP[symbol]
+
+    if symbol.endswith((".TW", ".TWO")):
+        return symbol
+
+    try:
+        info = yf.Ticker(symbol).info
+        name = info.get("longName") or info.get("shortName")
+        if name:
+            return name
+    except Exception:
+        pass
+    return symbol
+
+
+def get_latest_signal_symbols():
+    if not SUPABASE_URL or not SUPABASE_KEY or create_client is None:
+        return []
+
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        response = client.table("stock_selection_log").select(
+            "date, ticker, pre_breakout_signal, final_pullback_signal"
+        ).execute()
+        rows = getattr(response, "data", []) or []
+        if not rows:
+            return []
+
+        valid_rows = []
+        for row in rows:
+            ticker = str(row.get("ticker", "")).strip()
+            if not ticker:
+                continue
+            if bool(row.get("pre_breakout_signal")) or bool(
+                row.get("final_pullback_signal")
+            ):
+                valid_rows.append(row)
+
+        if not valid_rows:
+            return []
+
+        latest_date = max(
+            row.get("date") for row in valid_rows if row.get("date") is not None
+        )
+        latest_rows = [
+            row for row in valid_rows if str(row.get("date")) == str(latest_date)
+        ]
+
+        symbols = []
+        for row in latest_rows:
+            ticker = str(row.get("ticker", "")).strip()
+            if ticker and ticker not in symbols:
+                symbols.append(ticker)
+        return symbols
+    except Exception:
+        return []
 
 # ==========================================
 # 1. 頁面配置與標題設定
@@ -163,14 +262,24 @@ st.sidebar.header("BloomValue")
 st.sidebar.caption("觀察標的與參數設定")
 
 # 預設觀察清單（可由使用者自由增減）
-default_watchlist = "2344.TW, 2303.TW, 2481.TW, 3042.TW, 5483.TW"
+latest_signal_symbols = get_latest_signal_symbols()
+default_watchlist = (
+    ", ".join(latest_signal_symbols)
+    if latest_signal_symbols
+    else "2344.TW, 2303.TW, 2481.TW, 3042.TW, 5483.TW"
+)
 watchlist_input = st.sidebar.text_area(
     "輸入昨日篩選出的標的 (用逗號隔開)", value=default_watchlist, height=80
 )
 
 # 解析股票代碼
 symbols = [s.strip() for s in watchlist_input.split(",") if s.strip()]
-selected_symbol = st.sidebar.selectbox("🎯 選擇欲監控的標的", options=symbols)
+unique_symbols = list(dict.fromkeys(symbols))
+selected_symbol = st.sidebar.selectbox(
+    "🎯 選擇欲監控的標的",
+    options=unique_symbols,
+    format_func=lambda symbol: f"{get_stock_display_name(symbol)} ({symbol})",
+)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🛡️ 買進判斷門檻設定")
@@ -211,14 +320,15 @@ def fetch_stock_data(symbol):
 
 # 執行抓取
 df_daily, df_intra, error_msg = fetch_stock_data(selected_symbol)
+stock_display_name = get_stock_display_name(selected_symbol)
 
 if error_msg:
-    st.error(f"❌ 讀取 {selected_symbol} 失敗: {error_msg}")
+    st.error(f"❌ 讀取 {stock_display_name} ({selected_symbol}) 失敗: {error_msg}")
     st.stop()
 
 if df_intra.empty:
     st.warning(
-        f"⚠️ 標的 {selected_symbol} 目前無當日盤中即時交易數據（可能尚未開盤或非交易日）。"
+        f"⚠️ 標的 {stock_display_name} ({selected_symbol}) 目前無當日盤中即時交易數據（可能尚未開盤或非交易日）。"
     )
     st.stop()
 
@@ -320,6 +430,8 @@ else:
 # ==========================================
 # 5. UI 畫面佈局與即時資訊呈現
 # ==========================================
+
+st.subheader(f"📊 {stock_display_name} ({selected_symbol}) 分析")
 
 # 頁首 Metric 卡片
 m1, m2, m3, m4 = st.columns(4)
