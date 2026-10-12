@@ -2,7 +2,6 @@ from concurrent.futures import ThreadPoolExecutor
 import datetime
 import os
 import time
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -22,8 +21,6 @@ except Exception:
     Client = None
 
 load_dotenv()
-
-TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 
 def get_app_secret(key: str):
@@ -571,10 +568,10 @@ def foreign_buy_two_days(stock_id):
     if finmind_loader is None:
         return False
     try:
-        today = datetime.datetime.now(TAIPEI_TZ).date()
+        today = pd.Timestamp.today()
         data = finmind_loader.taiwan_stock_institutional_investors(
             stock_id=stock_id,
-            start_date=(today - datetime.timedelta(days=14)).strftime("%Y-%m-%d"),
+            start_date=(today - pd.Timedelta(days=14)).strftime("%Y-%m-%d"),
             end_date=today.strftime("%Y-%m-%d"),
         )
         if data is None or data.empty:
@@ -621,7 +618,7 @@ def save_results_to_supabase(df: pd.DataFrame):
     if supabase is None or df is None or df.empty:
         return False, "Supabase 未連線或資料為空 (請檢查 Secrets 設定)"
 
-    today_str = datetime.datetime.now(TAIPEI_TZ).date().strftime("%Y-%m-%d")
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
 
     # 篩選出觸發任意訊號的標的
     signal_mask = (
