@@ -64,8 +64,8 @@ except Exception:
 # ==========================================
 # 1. 共用參數與設定
 # ==========================================
-PRICE_MIN = 100
-PRICE_MAX = 250
+PRICE_MIN = 50
+PRICE_MAX = 300
 TOP_VOLUME_LIMIT = 300
 SCAN_WORKERS = 8
 FINMIND_INTERVAL_SECONDS = 0.5
@@ -789,7 +789,7 @@ def main():
     metric_columns[1].metric("價格池", f"{price_count} 檔")
     metric_columns[2].metric("成交量池", f"{volume_count} 檔")
     metric_columns[3].metric(
-        "100~250 回檔", f"{int(output['Pullback100250'].sum())} 檔"
+        "50~300 回檔", f"{int(output['Pullback100250'].sum())} 檔"
     )
     metric_columns[4].metric(
         "🎯 外資連買回檔", f"{int(output['FinalPullbackSignal'].sum())} 檔"
